@@ -1,2 +1,2 @@
-# gwquant
-gogo will quant
+# GarageQuant
+gogo will quant in his garage
