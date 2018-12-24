@@ -9,16 +9,13 @@ Data service
 # OANDA api imports
 from oandapyV20 import API
 
-# Account configs
-from accountinfo import garage_accounts
-
 import logging
 logger = logging.getLogger(__name__)
 
 class OanadaDataService:
     def __init__(self):
-        self._id = garage_accounts['Oanda']['id']
-        self._token = garage_accounts['Oanda']['token']
+        self._id = ''
+        self._token = ''
         self._data_spec = {}
         pass
 

@@ -30,7 +30,7 @@ if __name__ == '__main__':
     setup_logger()
 
     # eventdriver.test_event_driver()
-    test_yaml_load()
+    tradeconfig = test_yaml_load()
     oanda_dataservice.test_oanda_dataservice()
 
     pass
