@@ -10,7 +10,7 @@ from collections import defaultdict
 from queue import Queue, Empty
 from threading import Thread
 
-from util.gqutil import gq_hosting_thread_info, debug_trace
+from utils.gqutil import gq_hosting_thread_info, debug_trace
 
 
 class Event:
