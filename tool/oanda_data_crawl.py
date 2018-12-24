@@ -215,7 +215,7 @@ def setup_account(account_type):
         id = oanada_account_info['p_accountID']
     else:
         print('wrong account type')
-        return 9
+        return id, token
 
     return id, token
 
