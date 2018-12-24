@@ -10,7 +10,7 @@ from collections import defaultdict
 from queue import Queue, Empty
 from threading import Thread
 
-from util.gqutil import gq_hosting_thread_info
+from util.gqutil import gq_hosting_thread_info, debug_trace
 
 
 class Event:
@@ -51,7 +51,7 @@ class EventDriver:
             del self.__handler_map[event_type]
 
     def put_event(self, event):
-        print('----- put event ------')
+        debug_trace('----- put event ------')
         self.__queue.put(event)
 
     def start(self):
@@ -59,24 +59,24 @@ class EventDriver:
         self.__thread.start()
 
     def stop(self):
-        print('*** to stop the thread ')
+        debug_trace('*** to stop the thread ')
         self.__active = False
-        print('----- start join the thread ------')
+        debug_trace('----- start join the thread ------')
         self.__thread.join()
-        print('----- end of join the thread ------')
+        debug_trace('----- end of join the thread ------')
         pass
 
     def __run_loop(self):
         # when try to stop, will not stop until all the events are handled
         while self.__active or not self.__queue.empty():
-            print('*** in thread while loop')
+            debug_trace('*** in thread while loop')
             try:
                 event = self.__queue.get(block=True, timeout=0.5)  # 获取事件的阻塞时间设为1秒
                 self.__handle(event)
             except Empty:
                 pass
 
-        print('*** end of thread while loop')
+        debug_trace('*** end of thread while loop')
         return
 
     def __handle(self, event):
@@ -93,15 +93,15 @@ def unit_test():
     type_b = 'type_b'
 
     def type_a_func1(event):
-        print('\n\ttype a func-1')
+        debug_trace('\n\t%s: type a func-1' % str(event.event_type))
         # print(event)
 
     def type_a_func2(event):
-        print('\n\ttype a func-2')
+        debug_trace('\n\t%s: type a func-2' % str(event.event_type))
         # print(event)
 
     def type_b_func1(event):
-        print('\n\ttype b func-1')
+        debug_trace('\n\t%s: type b func-1' % str(event.event_type))
         # print(event)
 
     ed = EventDriver()
@@ -121,7 +121,8 @@ def unit_test():
 
     ed.stop()
 
-    print('end of test')
+    debug_trace('end of test')
+
 
 if __name__ == '__main__':
     unit_test()
