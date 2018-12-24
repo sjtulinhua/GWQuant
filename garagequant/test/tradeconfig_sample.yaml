@@ -1,0 +1,53 @@
+# yaml for data service configurations
+# todo : find right place to reside in
+
+oanda_account:
+  id: ''
+  token: ''
+
+mongodb_config:
+  host: 'localhost'
+  port: 27017
+  database_prefix: 'gq_'
+  database_postfix: '_oanda'
+
+data_spec:
+  instruments:
+    - 'EUR_USD'
+    - 'USD_JPY'
+  periods:
+    - 'M5'
+    - 'D'
+  startdate: '2018-11-01T00:00:00Z'
+  enddate: '2018-12-07T00:00:00Z'
+  storage: 'hdf5'
+  barcound: 2500
+
+#
+# download multiple predefined data set at one time
+# refer to below
+#
+
+#data_spec:
+#  - # group-1:
+#    instruments:
+#      - 'EUR_USD'
+#      - 'USD_JPY'
+#    periods:
+#      - 'M5'
+#      - 'D'
+#    startdate: '2018-11-01T00:00:00Z'
+#    enddate: '2018-12-07T00:00:00Z'
+#    storage: 'hdf5'
+#    barcound: 2500
+#  -
+#    instruments:
+#      - 'EUR_USD'
+#      - 'USD_JPY'
+#    periods:
+#      - 'M5'
+#      - 'D'
+#    startdate: '2018-11-01T00:00:00Z'
+#    enddate: '2018-12-07T00:00:00Z'
+#    storage: 'hdf5'
+#    barcound: 2500
