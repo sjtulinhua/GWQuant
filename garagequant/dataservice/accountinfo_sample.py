@@ -1,6 +1,4 @@
-
-
-#todo use jason to do configurations
+# todo use jason to do configurations
 
 garage_accounts = {
     "Oanda": {
@@ -10,6 +8,6 @@ garage_accounts = {
 
     "Lmax": {
         "id": "",
-        "password":""
+        "password": ""
     }
 }
