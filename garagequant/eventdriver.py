@@ -12,6 +12,9 @@ from threading import Thread
 
 from utils.gqutil import gq_hosting_thread_info, debug_trace
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class Event:
     def __init__(self, event_type=None, event_data=None):
@@ -51,7 +54,7 @@ class EventDriver:
             del self.__handler_map[event_type]
 
     def put_event(self, event):
-        debug_trace('----- put event ------')
+        logger.debug('put event: \n%s' % str(event))
         self.__queue.put(event)
 
     def start(self):
@@ -59,24 +62,24 @@ class EventDriver:
         self.__thread.start()
 
     def stop(self):
-        debug_trace('*** to stop the thread ')
+        logger.debug('*** to stop the thread ')
         self.__active = False
-        debug_trace('----- start join the thread ------')
+        logger.debug('----- start join the thread ------')
         self.__thread.join()
-        debug_trace('----- end of join the thread ------')
+        logger.debug('----- end of join the thread ------')
         pass
 
     def __run_loop(self):
         # when try to stop, will not stop until all the events are handled
         while self.__active or not self.__queue.empty():
-            debug_trace('*** in thread while loop')
+            logger.debug('*** in thread while loop')
             try:
                 event = self.__queue.get(block=True, timeout=0.5)  # 获取事件的阻塞时间设为1秒
                 self.__handle(event)
             except Empty:
                 pass
 
-        debug_trace('*** end of thread while loop')
+            logger.debug('*** end of thread while loop')
         return
 
     def __handle(self, event):
@@ -86,22 +89,22 @@ class EventDriver:
 
 
 # testing
-def unit_test():
-    gq_hosting_thread_info('__main__')
+def test_event_driver():
+    logger.info('start test_event_driver')
 
     type_a = 'type_a'
     type_b = 'type_b'
 
     def type_a_func1(event):
-        debug_trace('\n\t%s: type a func-1' % str(event.event_type))
+        logger.debug('\t%s: type a func-1' % str(event.event_type))
         # print(event)
 
     def type_a_func2(event):
-        debug_trace('\n\t%s: type a func-2' % str(event.event_type))
+        logger.debug('\t%s: type a func-2' % str(event.event_type))
         # print(event)
 
     def type_b_func1(event):
-        debug_trace('\n\t%s: type b func-1' % str(event.event_type))
+        logger.debug('\t%s: type b func-1' % str(event.event_type))
         # print(event)
 
     ed = EventDriver()
@@ -121,8 +124,5 @@ def unit_test():
 
     ed.stop()
 
-    debug_trace('end of test')
+    logger.info('end of test')
 
-
-if __name__ == '__main__':
-    unit_test()

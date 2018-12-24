@@ -12,6 +12,8 @@ from oandapyV20 import API
 # Account configs
 from accountinfo import garage_accounts
 
+import logging
+logger = logging.getLogger(__name__)
 
 class OanadaDataService:
     def __init__(self):
@@ -20,7 +22,7 @@ class OanadaDataService:
         self._data_spec = {}
         pass
 
-    def set_data_param(self, storage, data_spec):
+    def set_query_param(self, storage, data_spec):
         """
         add historical data reference to data service
         :param storage: storage type, support 'hdf5', 'csv', 'mongodb', 'plain'
@@ -35,7 +37,7 @@ class OanadaDataService:
     def create_client_session(self):
         return API(access_token=self._token, environment='live')
 
-
-if __name__ == '__main__':
+# module test
+def test_oanda_dataservice():
     ods = OanadaDataService()
     ods.create_client_session()
