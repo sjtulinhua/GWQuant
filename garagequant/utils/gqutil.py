@@ -5,6 +5,7 @@
 private utils
 
 """
+import os
 from threading import currentThread
 
 
@@ -17,3 +18,7 @@ def gq_hosting_thread_info(snippet):
 def debug_trace(strings):
     print(strings)
     # pass
+
+def check_data_dir(dir):
+    if not os.path.exists(dir):
+        os.makedirs(dir)

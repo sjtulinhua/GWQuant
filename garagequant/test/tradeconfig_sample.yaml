@@ -1,53 +1,33 @@
 # yaml for data service configurations
 # todo : find right place to reside in
+oanda:
+  account:
+    id: ''
+    token: ''
+    type: 'live'  # 'live' or 'practise' for living and simulate trading accounts
 
-oanda_account:
-  id: ''
-  token: ''
+  storage_spec:
+    hdf5:
+      file_path: '../data/gqh5'
+      name_prefix: 'gq_hdf5_'
+    mongodb:
+      host: 'localhost'
+      port: 27017
+      name_prefix: 'gq_oanda_'
 
-mongodb_config:
-  host: 'localhost'
-  port: 27017
-  database_prefix: 'gq_'
-  database_postfix: '_oanda'
+  data_spec:
+    instruments:
+      - 'EUR_USD'
+      - 'USD_JPY'
+    periods:
+      - 'M5'
+      - 'D'
+    startdate: '2018-11-01T00:00:00Z'
+    enddate: '2018-12-07T00:00:00Z'
+    storage: 'hdf5'
+    barcound: 2500
 
-data_spec:
-  instruments:
-    - 'EUR_USD'
-    - 'USD_JPY'
-  periods:
-    - 'M5'
-    - 'D'
-  startdate: '2018-11-01T00:00:00Z'
-  enddate: '2018-12-07T00:00:00Z'
-  storage: 'hdf5'
-  barcound: 2500
+tushare:
+  account:
+    id: 0
 
-#
-# download multiple predefined data set at one time
-# refer to below
-#
-
-#data_spec:
-#  - # group-1:
-#    instruments:
-#      - 'EUR_USD'
-#      - 'USD_JPY'
-#    periods:
-#      - 'M5'
-#      - 'D'
-#    startdate: '2018-11-01T00:00:00Z'
-#    enddate: '2018-12-07T00:00:00Z'
-#    storage: 'hdf5'
-#    barcound: 2500
-#  -
-#    instruments:
-#      - 'EUR_USD'
-#      - 'USD_JPY'
-#    periods:
-#      - 'M5'
-#      - 'D'
-#    startdate: '2018-11-01T00:00:00Z'
-#    enddate: '2018-12-07T00:00:00Z'
-#    storage: 'hdf5'
-#    barcound: 2500

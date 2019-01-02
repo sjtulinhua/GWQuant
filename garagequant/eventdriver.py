@@ -10,8 +10,6 @@ from collections import defaultdict
 from queue import Queue, Empty
 from threading import Thread
 
-from utils.gqutil import gq_hosting_thread_info, debug_trace
-
 import logging
 logger = logging.getLogger(__name__)
 
