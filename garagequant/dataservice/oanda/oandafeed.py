@@ -116,7 +116,7 @@ class OandaDataService:
                 #       3. add unique key as an attr of a h5 table so that can used for judge new data
                 #          whether already existed or not
 
-                logger.warning(f'download to file: {os.path.abspath(path_name)}')
+                logger.info(f'download to file: {os.path.abspath(path_name)}')
 
                 for param in param_list:
                     start_time = time.time()
@@ -129,11 +129,11 @@ class OandaDataService:
                         candles = r.response.get('candles')  # candles is a list
 
                         if not candles:
-                            logger.warning(f'skip to write next: find empty data with candles == []')
+                            logger.info(f'skip to write next: find empty data with candles == []')
                             continue
 
                         else:
-                            logger.warning(f'* download progress: {candles[0].get("time")}')
+                            logger.info(f'* download progress: {candles[0].get("time")}')
 
                         candles = list(map(self._normalize_oanda_raw_candles, candles))
                         df_candles = pd.DataFrame(candles)
@@ -150,7 +150,7 @@ class OandaDataService:
                         h5f.append(api_param['granularity'], df_candles)
 
                     end_time = time.time()
-                    logger.warning('\t - it took {} second to download {} - {} '
+                    logger.info('\t - it took {} second to download {} - {} '
                                    .format(end_time - start_time, inst, api_param['granularity']))
     @staticmethod
     def _normalize_oanda_raw_candles(oanda_candles):

@@ -16,6 +16,9 @@ logger = None
 
 
 def setup_logger():
+    # disable logging.info for 3rd party modules
+    logging.getLogger('oandapyV20').setLevel(logging.WARNING)
+
     # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s-%(name)s-%(levelname)s: %(message)s')
     # logging.basicConfig(level=logging.DEBUG, format='%(levelname)s\t<mod: %(name)s> : %(message)s')
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: \t%(message)s')
