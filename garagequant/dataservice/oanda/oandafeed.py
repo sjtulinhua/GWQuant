@@ -52,6 +52,7 @@ class OandaDataService:
             logger.exception(f'OandaDataService instance init error:\n{str(Exception)} - {str(e)}')
 
         self._oanda_client = None
+        self._fetch_stats = []
 
     def backtest_data_feed(self):
         pass
@@ -70,6 +71,20 @@ class OandaDataService:
 
         except Exception as e:
             logger.exception(f'load historical data error:\n{str(Exception)} - {str(e)}')
+
+        #
+        # dump download stats
+        #
+        if self._fetch_stats:
+            for fetch_stats_dict in self._fetch_stats:
+                for file_name, group_list in fetch_stats_dict.items():
+                    logger.info(str(file_name))
+                    for stats_dict in group_list:
+                        for key, val in stats_dict.items():
+                            if key == 'request count' or key == 'download time':
+                                logger.info(f'\t\t{key}: {val}')
+                            else:
+                                logger.info(f'\t{key}: {val}')
 
     def _fetch_to_hdf5(self, storage_spec, data_spec):
         """
@@ -90,9 +105,9 @@ class OandaDataService:
             path_name = os.path.join(file_path, file_name)
 
             for granularity in data_spec['periods']:
-                param = OandaApiParam(data_spec)
-                param.set_param_field('granularity', granularity)
-                api_param_list.append(param)
+                api_param = OandaApiParam(data_spec)
+                api_param.set_param_field('granularity', granularity)
+                api_param_list.append(api_param)
 
             fetch_list.append((path_name, inst, api_param_list))
 
@@ -118,15 +133,21 @@ class OandaDataService:
 
                 logger.info(f'download to file: {os.path.abspath(path_name)}')
 
-                for param in param_list:
+                stats = {f'{path_name}': [], }
+                child_stats = stats[f'{path_name}']
+
+                for api_param in param_list:
                     start_time = time.time()
+
+                    requests = 0
+                    stats_dict = {}
 
                     # The factory returns a generator generating consecutive
                     # requests to retrieve full history from date 'from' till 'to'
-                    api_param = param.param
-                    for r in InstrumentsCandlesFactory(instrument=inst, params=api_param):
+                    for r in InstrumentsCandlesFactory(instrument=inst, params=api_param.param):
                         self._oanda_client.request(r)
                         candles = r.response.get('candles')  # candles is a list
+                        requests += 1
 
                         if not candles:
                             logger.info(f'skip to write next: find empty data with candles == []')
@@ -147,11 +168,19 @@ class OandaDataService:
                         # df_candles.set_index('timestamp', inplace=True)
 
                         # write to file
-                        h5f.append(api_param['granularity'], df_candles)
+                        h5f.append(api_param.param['granularity'], df_candles)
 
                     end_time = time.time()
-                    logger.info('\t - it took {} second to download {} - {} '
-                                   .format(end_time - start_time, inst, api_param['granularity']))
+
+                    stats_dict['group'] = api_param.param['granularity']
+                    stats_dict['request count'] = requests
+                    stats_dict['download time'] = end_time - start_time
+                    # logger.info('\t - it took {} second to download {} - {} '
+                    #                .format(stats_dict['download time'], inst, stats_dict['group']))
+                    child_stats.append(stats_dict)
+
+                self._fetch_stats.append(stats)
+
     @staticmethod
     def _normalize_oanda_raw_candles(oanda_candles):
         from collections import OrderedDict
