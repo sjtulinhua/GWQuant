@@ -8,10 +8,11 @@ Data service
 
 import time
 import os
-import h5py
 import logging
+# import datetime
+import contextlib
 import pandas as pd
-#import numpy as np
+# import numpy as np
 # import tables as tb
 
 # import oanda api
@@ -29,13 +30,13 @@ HDF5_COMP_LIB = 'blosc'
 
 logger = logging.getLogger(__name__)
 
+
 class OandaApiParam:
-    def __init__(self):
+    def __init__(self, data_spec):
         self.param = {
-            'price': Oanda.data_spec['price'],
-            'from': Oanda.data_spec['startdate'],
-            'to': Oanda.data_spec['enddate'],
-            'count': Oanda.request_bar_cnt
+            'price': data_spec['price'],
+            'from': data_spec['startdate'],
+            'to': data_spec['enddate']
         }
 
     def set_param_field(self, field, value):
@@ -53,73 +54,71 @@ class OandaDataService:
         self._oanda_client = None
 
     def backtest_data_feed(self):
-        try:
-            self._load_histdata()
-        except Exception as e:
-            logger.exception(f'load historical data error:\n{str(Exception)} - {str(e)}')
+        pass
 
     def live_data_feed(self):
         pass
 
-    def _load_histdata(self):
+    def fetch_data(self, fetch_config):
         """
-        To read or download historical data sets defined by data_spec
-        :return:
+        download data from oanda server following data_config rules
         """
-        storage = Oanda.data_spec['storage']
-        if storage == 'hdf5':
-            self._load_hdf5()
-            return
+        try:
+            storage = fetch_config['storage']
+            if storage == 'hdf5':
+                self._fetch_to_hdf5(fetch_config['storage_spec'], fetch_config['data_spec'])
 
-    def _create_client_session(self):
-        self._oanda_client = API(access_token=Oanda.token, environment=Oanda.account_type)
+        except Exception as e:
+            logger.exception(f'load historical data error:\n{str(Exception)} - {str(e)}')
 
-    def _load_hdf5(self):
+    def _fetch_to_hdf5(self, storage_spec, data_spec):
         """
         parse the list of target hdf5 files with fetch params from data_spec section of trade configuration
         """
         fetch_list = []
 
         # each hdf5 file accommodates on instrument, each period is stored in separate group
-        for inst in Oanda.data_spec['instruments']:
+        for inst in data_spec['instruments']:
             api_param_list = []
-            file_path = os.path.expanduser(Oanda.storage_spec['hdf5']['file_path'])
-            file_name = str.lower(f'{inst}_{Oanda.account_type}.hdf5')
 
-            for granularity in Oanda.data_spec['periods']:
-                param = OandaApiParam()
+            # ensure the data directory exists
+            file_path = os.path.expanduser(storage_spec['hdf5']['file_path'])
+            if not os.path.isdir(file_path):
+                gqutil.check_data_dir(file_path)
+
+            file_name = str.lower(f'{inst}_{Oanda.account_type}.hdf5')
+            path_name = os.path.join(file_path, file_name)
+
+            for granularity in data_spec['periods']:
+                param = OandaApiParam(data_spec)
                 param.set_param_field('granularity', granularity)
                 api_param_list.append(param)
 
-            fetch_list.append((file_path, file_name, inst, api_param_list))
-        #
-        # below is going to store each granularity into one separate h5 file
-        #
-        # for inst in Oanda.data_spec['instruments']:
-        #     for granularity in Oanda.data_spec['periods']:
-        #         file_path = os.path.expanduser(Oanda.storage_spec['hdf5']['file_path'])
-        #         file_name = str.lower(f'{inst}_{granularity}_{Oanda.account_type}.hdf5')
-        #         api_param['granularity'] = granularity
-        #         fetch_list.append((file_path, file_name, inst, api_param))
+            fetch_list.append((path_name, inst, api_param_list))
 
-        self._fetch_data_to_h5(fetch_list)
+        self._download_data_to_hdf5(fetch_list, storage_spec['tableheader'])
 
-    def _fetch_data_to_h5(self, fetch_list):
+    def _download_data_to_hdf5(self, download_list, field_dtype_dict):
         # create Oanda session
-        self._create_client_session()
+        if self._oanda_client is None:
+            self._create_client_session()
 
         # download and save to files
-        for path, fname, inst, param_list in fetch_list:
-            gqutil.check_data_dir(path)
-            path_name = os.path.join(path, fname)
+        for path_name, inst, param_list in download_list:
 
             # each hdf5 file accommodates on instrument, each period is stored in separate group
-            with pd.HDFStore(path_name, 'a', complevel=HDF5_COMP_LEVEL, complib=HDF5_COMP_LIB) as h5f:
-                # todo avid downloading existed data
-                logger.info(f'download to file: {os.path.abspath(path_name)}')
+            with contextlib.closing(
+                    pd.HDFStore(path_name, 'a', complevel=HDF5_COMP_LEVEL, complib=HDF5_COMP_LIB)) as h5f:
+
+                # todo avid downloading existed data:
+                #       1. label existed data by unique key which combining volume and start/to dates
+                #       2. could assume already existed data is correct (continuously, no missed data in it)
+                #       3. add unique key as an attr of a h5 table so that can used for judge new data
+                #          whether already existed or not
+
+                logger.warning(f'download to file: {os.path.abspath(path_name)}')
 
                 for param in param_list:
-
                     start_time = time.time()
 
                     # The factory returns a generator generating consecutive
@@ -128,46 +127,65 @@ class OandaDataService:
                     for r in InstrumentsCandlesFactory(instrument=inst, params=api_param):
                         self._oanda_client.request(r)
                         candles = r.response.get('candles')  # candles is a list
-                        if (candles == []):
-                            logger.info(f'skip to write next: find empty data (with candles == [])')
-                            continue
-                        else:
-                            logger.info(f'* download progress: {candles[0].get("time")}')
 
-                        candles = list(map(self._normalize_raw_candles, candles))
+                        if not candles:
+                            logger.warning(f'skip to write next: find empty data with candles == []')
+                            continue
+
+                        else:
+                            logger.warning(f'* download progress: {candles[0].get("time")}')
+
+                        candles = list(map(self._normalize_oanda_raw_candles, candles))
                         df_candles = pd.DataFrame(candles)
 
                         # shift to appropriate data type for shrinking data size
                         for col in df_candles.columns:
-                            df_candles[col] = df_candles[col].astype(Oanda.storage_spec['tableheader'][col], copy=True)
+                            df_candles[col] = df_candles[col].astype(field_dtype_dict[col], copy=True)
                             logger.debug(df_candles[col].dtypes)
 
                         # reset index
-                        df_candles.set_index('timestamp', inplace=True)
+                        # df_candles.set_index('timestamp', inplace=True)
 
                         # write to file
                         h5f.append(api_param['granularity'], df_candles)
 
                     end_time = time.time()
-                    logger.info('\t - it took {} second to download {} - {} '
-                                .format(end_time-start_time, inst, api_param['granularity']))
-
-    def _normalize_raw_candles(self, candles):
+                    logger.warning('\t - it took {} second to download {} - {} '
+                                   .format(end_time - start_time, inst, api_param['granularity']))
+    @staticmethod
+    def _normalize_oanda_raw_candles(oanda_candles):
         from collections import OrderedDict
-        ohlc = OrderedDict(timestamp=pd.to_datetime(candles['time']),
-                    openbid=float(candles['bid']['o']),
-                    highbid=float(candles['bid']['h']),
-                    lowbid=float(candles['bid']['l']),
-                    closebid=float(candles['bid']['c']),
-                    openask=float(candles['ask']['o']),
-                    highask=float(candles['ask']['h']),
-                    lowask=float(candles['ask']['l']),
-                    closeask=float(candles['ask']['c']),
-                    volume=float(candles['volume']),
-                    complete=float(candles['complete']))
-
+        ohlc = OrderedDict(timestamp=pd.to_datetime(oanda_candles['time']),
+                           openbid=float(oanda_candles['bid']['o']),
+                           highbid=float(oanda_candles['bid']['h']),
+                           lowbid=float(oanda_candles['bid']['l']),
+                           closebid=float(oanda_candles['bid']['c']),
+                           openask=float(oanda_candles['ask']['o']),
+                           highask=float(oanda_candles['ask']['h']),
+                           lowask=float(oanda_candles['ask']['l']),
+                           closeask=float(oanda_candles['ask']['c']),
+                           volume=float(oanda_candles['volume']),
+                           complete=float(oanda_candles['complete']))
         return ohlc
-# module test
-def test_oanda_data_fetch(tradeconfig):
-    ods = OandaDataService(tradeconfig['oanda'])
-    ods.backtest_data_feed()
+
+    def _create_client_session(self):
+        self._oanda_client = API(access_token=Oanda.token, environment=Oanda.account_type)
+
+
+def fetch_oanda_data(oandaconfig, fetchconfig):
+    """
+    for action == getdata, download data from oanda server
+    #todo for simplifying, data would be override, improve this!
+    """
+    ods = OandaDataService(oandaconfig)
+    ods.fetch_data(fetchconfig)
+
+
+def feed_oanda_data(tradeconfig):
+    # backtest data setup
+    # start_date = datetime.datetime(2015, 1, 1)
+    # end_date = datetime.datetime(2018, 1, 1)
+    # instrument = 'EUR_USD'
+    # granularity = 'D'
+    # backtest_data_feed(instrument, granularity, start_date, end_date)
+    pass

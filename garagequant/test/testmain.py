@@ -35,4 +35,18 @@ if __name__ == '__main__':
 
     # eventdriver.test_event_driver()
     tradeconfig = test_yaml_load()
-    oandafeed.test_oanda_data_fetch(tradeconfig)
+
+    if tradeconfig['action'] == 'getdata':
+        if tradeconfig['getdata']['broker'] == 'oanda':
+            oandafeed.fetch_oanda_data(tradeconfig['oanda'], tradeconfig['getdata'])
+
+    elif tradeconfig['action'] == 'backtest':
+        logger.info('to backtest something')
+        pass
+
+    elif tradeconfig['action'] == 'livetrade':
+        logger.info('to livetrade')
+        pass
+
+    else:
+        logger.error('wrong action type, check your tradeconfig file')
