@@ -2,15 +2,16 @@
 
 """
 
-Master test
+Master tester
 
 """
 
 import yaml
 import logging
 
-import garagequant.eventdriver
 from garagequant.dataservice.oanda import oandafeed
+
+import garagequant.eventdriver as evtd
 
 logger = None
 
@@ -27,24 +28,29 @@ def setup_logger():
     logger.addHandler(logging.StreamHandler())
 
 
-def test_yaml_load():
-    with open('tradeconfig.yaml', 'r') as f:
+def test_yaml_load(config_file):
+    with open(config_file, 'r') as f:
         yamlconfig = yaml.load(f)
     return yamlconfig
 
 
+def run_backtesting(config_file):
+    # initial a backtest
+    ed = evtd.EventDriver()
+    oandafeed.feed_oanda_data(tradeconfig)
+
 if __name__ == '__main__':
     setup_logger()
 
-    # eventdriver.test_event_driver()
-    tradeconfig = test_yaml_load()
+    tradeconfig = test_yaml_load('tradeconfig.yaml')
 
     if tradeconfig['action'] == 'getdata':
         if tradeconfig['getdata']['broker'] == 'oanda':
             oandafeed.fetch_oanda_data(tradeconfig['oanda'], tradeconfig['getdata'])
 
     elif tradeconfig['action'] == 'backtest':
-        logger.info('to backtest something')
+        if tradeconfig['getdata']['broker'] == 'oanda':
+            run_backtesting(tradeconfig)
         pass
 
     elif tradeconfig['action'] == 'livetrade':

@@ -27,6 +27,8 @@ from garagequant.utils import gqutil
 HDF5_COMP_LEVEL = 4
 """ HDF5_COMP_LIB: 'blosc', 'bzip2', 'lzo', 'zlib'"""
 HDF5_COMP_LIB = 'blosc'
+""" Write chunk (in candle rows)"""
+HDFSTORE_CHUNK_IN_ROW = 2000000
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,8 @@ class OandaApiParam:
         self.param = {
             'price': data_spec['price'],
             'from': data_spec['startdate'],
-            'to': data_spec['enddate']
+            'to': data_spec['enddate'],
+            'count': data_spec['barcound']
         }
 
     def set_param_field(self, field, value):
@@ -81,10 +84,10 @@ class OandaDataService:
                     logger.info(str(file_name))
                     for stats_dict in group_list:
                         for key, val in stats_dict.items():
-                            if key == 'request count' or key == 'download time':
-                                logger.info(f'\t\t{key}: {val}')
-                            else:
+                            if key == 'group':
                                 logger.info(f'\t{key}: {val}')
+                            else:
+                                logger.info(f'\t\t{key}: {val}')
 
     def _fetch_to_hdf5(self, storage_spec, data_spec):
         """
@@ -122,25 +125,50 @@ class OandaDataService:
         for path_name, inst, param_list in download_list:
 
             # each hdf5 file accommodates on instrument, each period is stored in separate group
-            with contextlib.closing(
-                    pd.HDFStore(path_name, 'a', complevel=HDF5_COMP_LEVEL, complib=HDF5_COMP_LIB)) as h5f:
-
+            with pd.HDFStore(path_name, 'a', complevel=HDF5_COMP_LEVEL, complib=HDF5_COMP_LIB) as h5f:
                 # todo avid downloading existed data:
                 #       1. label existed data by unique key which combining volume and start/to dates
                 #       2. could assume already existed data is correct (continuously, no missed data in it)
                 #       3. add unique key as an attr of a h5 table so that can used for judge new data
                 #          whether already existed or not
 
+                def _dump_h5(h5f, df_cache, final=True):
+                    # shift to appropriate data type for shrinking data size
+                    for col in df_cache.columns:
+                        df_cache[col] = df_cache[col].astype(field_dtype_dict[col], copy=True)
+                        logger.debug(df_cache[col].dtypes)
+
+                    # reset index
+                    # df_candles.set_index('timestamp', inplace=True)
+
+                    if final:
+                        logger.info('\n\t\t **** Dumping to file: completed ****\n')
+                    else:
+                        logger.info('\n\t\t **** Dumping to file: to continue (in loop) ****\n')
+
+                    # write to file
+                    h5f.append(api_param.param['granularity'], df_cache, data_columns=True)
+
                 logger.info(f'download to file: {os.path.abspath(path_name)}')
 
                 stats = {f'{path_name}': [], }
+
                 child_stats = stats[f'{path_name}']
 
                 for api_param in param_list:
                     start_time = time.time()
 
                     requests = 0
-                    stats_dict = {}
+                    candle_cnt = 0
+                    stats_dict = {'group': None, 'num of candles': 0, }
+                    df_cache = None
+
+                    # for simplify: remove existed data
+                    try:
+                        logger.info(f"About to override data in Group {api_param.param['granularity']} ")
+                        h5f.remove(api_param.param['granularity'])
+                    except KeyError:
+                        logger.info(f"Group {api_param.param['granularity']} doesn't exist, create & write")
 
                     # The factory returns a generator generating consecutive
                     # requests to retrieve full history from date 'from' till 'to'
@@ -152,24 +180,37 @@ class OandaDataService:
                         if not candles:
                             logger.info(f'skip to write next: find empty data with candles == []')
                             continue
-
                         else:
-                            logger.info(f'* download progress: {candles[0].get("time")}')
+                            candle_cnt += len(candles)
+                            stats_dict['num of candles'] = candle_cnt
+                            logger.info(f'* download progress: {candles[0].get("time")} < {len(candles)} candles>')
 
                         candles = list(map(self._normalize_oanda_raw_candles, candles))
-                        df_candles = pd.DataFrame(candles)
 
-                        # shift to appropriate data type for shrinking data size
-                        for col in df_candles.columns:
-                            df_candles[col] = df_candles[col].astype(field_dtype_dict[col], copy=True)
-                            logger.debug(df_candles[col].dtypes)
+                        if df_cache is None:
+                            df_cache = pd.DataFrame(candles)
+                        else:
+                            # df_cache = df_cache.append(candles)
+                            next_cached_idx = df_cache.shape[0]
+                            new_idx = range(next_cached_idx, next_cached_idx+len(candles))
+                            df_cache = df_cache.append(pd.DataFrame(candles, index=new_idx))
 
-                        # reset index
-                        # df_candles.set_index('timestamp', inplace=True)
+                        cache_size = df_cache.memory_usage(deep=True).sum()
+                        logger.info(f"  cached {candle_cnt} candles have used {cache_size} Bytes, \
+                                                        {cache_size / candle_cnt}B/Candle")
 
-                        # write to file
-                        h5f.append(api_param.param['granularity'], df_candles)
+                        if candle_cnt > HDFSTORE_CHUNK_IN_ROW:
+                            assert(df_cache.shape[0] == candle_cnt)
+                            candle_cnt = 0
+                            _dump_h5(h5f, df_cache, final=False)
+                            df_cache = None
 
+                    if df_cache is not None:
+                        _dump_h5(h5f, df_cache, final=True)
+                    else:
+                        logger.info(f'candles are fetched inside the loop')
+
+                    h5f.create_table_index(api_param.param['granularity'], columns=True, optlevel=9, kind='full')
                     end_time = time.time()
 
                     stats_dict['group'] = api_param.param['granularity']
