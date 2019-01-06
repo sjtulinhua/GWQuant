@@ -5,17 +5,18 @@
 Event engine definitions
 
 """
-
+from garagequant.eventtype import *
 from collections import defaultdict
 from queue import Queue, Empty
 from threading import Thread
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 class Event:
-    def __init__(self, event_type=None, event_data=None):
+    def __init__(self, event_type, event_data=None):
         self.event_type = event_type
         self.event_data = event_data  # data would be defined offline by case
 
@@ -32,7 +33,7 @@ class EventDriver:
         # events queue
         self.__queue = Queue()
 
-        # store handlers, map type <-> handler for events
+        # store handlers, map event_type <-> handler for events
         self.__handler_map = defaultdict(list)
 
         # handler thread
@@ -52,7 +53,7 @@ class EventDriver:
             del self.__handler_map[event_type]
 
     def put_event(self, event):
-        logger.debug('put event: \n%s' % str(event))
+        logger.debug(f'[EventLoop] put event: {event.event_type}')
         self.__queue.put(event)
 
     def start(self):
@@ -60,29 +61,29 @@ class EventDriver:
         self.__thread.start()
 
     def stop(self):
-        logger.debug('*** to stop the thread ')
+        logger.debug('[EventLoop] stop loop ')
         self.__active = False
-        logger.debug('----- start join the thread ------')
-        self.__thread.join()
-        logger.debug('----- end of join the thread ------')
+        # logger.debug('----- start join the thread ------')
+        # self.__thread.join()
+        # logger.debug('----- end of join the thread ------')
         pass
 
     def __run_loop(self):
         # when try to stop, will not stop until all the events are handled
         while self.__active or not self.__queue.empty():
-            logger.debug('*** in thread while loop')
             try:
-                event = self.__queue.get(block=True, timeout=0.5)  # 获取事件的阻塞时间设为1秒
+                event = self.__queue.get(block=False, timeout=0.5)
+                logger.debug(f'[EventLoop] Get event: {event.event_type}')
                 self.__handle(event)
             except Empty:
-                pass
+                self.__queue.put(Event(EVENT_EMPTY_QUEUE))
 
-            logger.debug('*** end of thread while loop')
+        # when loop stopped, queue thread stops too
         return
 
     def __handle(self, event):
         if event.event_type in self.__handler_map:
-            [handler(event) for handler in self.__handler_map[event.event_type]]
+            [handler(event.event_data) for handler in self.__handler_map[event.event_type]]
         pass
 
 
@@ -123,4 +124,3 @@ def test_event_driver():
     ed.stop()
 
     logger.info('end of test')
-

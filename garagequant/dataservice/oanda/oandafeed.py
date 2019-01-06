@@ -66,7 +66,7 @@ class OandaDataService(gqds.DataService):
         """
         pass
 
-    def backtest_data_feed(self, backtestconfig):
+    def get_backtest_data_feed(self, backtestconfig):
         """
         Generate backtest heartbeat provider
         :return: Generator for feeding data
@@ -124,7 +124,7 @@ class OandaDataService(gqds.DataService):
                                          chunksize=chunksize)
             try:
                 df_bar_chunk = next(self._chunk_feed)
-                logger.info(f'load hdf5 chunk: {df_bar_chunk.shape[0]} bars')
+                logger.debug(f'load hdf5 chunk: {df_bar_chunk.shape[0]} bars')
                 bar_feed = df_bar_chunk.iterrows()
             except StopIteration:
                 logger.info(f'all hdf5 chunks loaded')

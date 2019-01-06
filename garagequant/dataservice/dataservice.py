@@ -11,5 +11,5 @@ from abc import ABC, abstractmethod
 
 class DataService(ABC):
     @abstractmethod
-    def backtest_data_feed(self, config):
+    def get_backtest_data_feed(self, config):
         pass

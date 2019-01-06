@@ -21,7 +21,7 @@ def setup_logger():
 
     # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s-%(name)s-%(levelname)s: %(message)s')
     # logging.basicConfig(level=logging.DEBUG, format='%(levelname)s\t<mod: %(name)s> : %(message)s')
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: \t%(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: \t%(message)s')
     global logger
     logger = logging.getLogger('__main__')
     logger.addHandler(logging.StreamHandler())
@@ -58,3 +58,4 @@ if __name__ == '__main__':
 
     else:
         logger.error('wrong action type, check your tradeconfig file')
+

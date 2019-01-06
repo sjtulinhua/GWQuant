@@ -31,6 +31,6 @@ def measuretime(func):
         t0 = timeit.default_timer()
         result = func(*args, **kwargs)
         elapsed = timeit.default_timer() - t0
-        logger.info(f'[PFM] {func.__module__} -> {func.__name__} has consumed: {elapsed: {5}.{8}} sec. ')
+        logger.debug(f'[PFM] {func.__module__} -> {func.__name__} has consumed: {elapsed: {5}.{8}} sec. ')
         return result
     return measure
