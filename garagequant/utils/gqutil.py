@@ -6,8 +6,11 @@ private utils
 
 """
 import os
+import timeit
+import logging
 from threading import currentThread
 
+logger = logging.getLogger(name=__name__)
 
 def gq_hosting_thread_info(snippet):
     debug_trace('\n* ' + snippet + 'revent loop (__run_loop) in thread:')
@@ -22,3 +25,13 @@ def debug_trace(strings):
 def check_data_dir(dir):
     if not os.path.exists(dir):
         os.makedirs(dir)
+
+def measuretime(func):
+    def measure(*args, **kwargs):
+        t0 = timeit.default_timer()
+        result = func(*args, **kwargs)
+        elapsed = timeit.default_timer() - t0
+        name = func.__name__
+        logger.info(f'performance measurement: {name} took: {elapsed: {10}.{8}} sec. ')
+        return result
+    return measure

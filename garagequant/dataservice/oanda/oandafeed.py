@@ -136,6 +136,7 @@ class OandaDataService(gqds.DataService):
         else:  # for future supported storages (csv, database, etc.)
             raise NotImplementedError
 
+    @gqutil.measuretime
     def _get_chunk_feed(self, file_path_name, storage_type, start_date, end_date, group=None, chunksize=None):
         if storage_type == 'hdf5':
             try:
