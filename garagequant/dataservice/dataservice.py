@@ -6,8 +6,10 @@ Data service
 
 """
 
-import abc
+from abc import ABC, abstractmethod
 
-class DataService:
-    def __init__(self):
+
+class DataService(ABC):
+    @abstractmethod
+    def backtest_data_feed(self, config):
         pass

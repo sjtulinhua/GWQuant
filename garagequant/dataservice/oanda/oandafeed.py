@@ -22,13 +22,14 @@ from oandapyV20.contrib.factories import InstrumentsCandlesFactory
 # import in-house modules
 from .oanda import Oanda
 from garagequant.utils import gqutil
+from garagequant.dataservice import dataservice as gqds
 
 """ HDF5_COMP_LEVEL：0~9 """
 HDF5_COMP_LEVEL = 4
 """ HDF5_COMP_LIB: 'blosc', 'bzip2', 'lzo', 'zlib'"""
 HDF5_COMP_LIB = 'blosc'
 """ Write chunk (in candle rows)"""
-HDFSTORE_CHUNK_IN_ROW = 2000000
+HDFSTORE_CHUNK_IN_ROW: int = 50  #2000000
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class OandaApiParam:
         self.param[field] = value
 
 
-class OandaDataService:
+class OandaDataService(gqds.DataService):
 
     def __init__(self, oanda_config=None):
         try:
@@ -56,9 +57,106 @@ class OandaDataService:
 
         self._oanda_client = None
         self._fetch_stats = []
+        self._storage = None  # general storage object reference to specified data storage
+        self._chunk_feed = None
 
-    def backtest_data_feed(self):
+    def ask_for_data(self):
+        """
+        Asking instrument data for algorithms (not heart beat)
+        """
         pass
+
+    def backtest_data_feed(self, backtestconfig):
+        """
+        Generate backtest heartbeat provider
+        :return: Generator for feeding data
+        """
+        # parse path name of target data files from config
+        storage_type = backtestconfig['storage']
+        storage_spec = backtestconfig['storage_spec']
+        path_name = ''
+        start_date = ''
+        end_date = ''
+        group = None
+
+        if storage_type == 'hdf5':
+            file_path = os.path.expanduser(storage_spec['hdf5']['file_path'])
+            file_name = str.lower(f"{backtestconfig['instrument']}_{Oanda.account_type}.hdf5")
+            path_name = os.path.join(file_path, file_name)
+            start_date = backtestconfig['startdate']
+            end_date = backtestconfig['enddate']
+            group = backtestconfig['granularity']
+        else:  # for future supported storages (csv, database, etc.)
+            raise NotImplementedError
+
+        def bar_generator():
+            bar_feed = None
+            bar_cnt = 0
+
+            if bar_feed is None:
+                bar_feed = self._get_bar_feed(path_name, storage_type, start_date, end_date,
+                                              group=group, chunksize=HDFSTORE_CHUNK_IN_ROW)
+            while True:
+                try:
+                    ret = next(bar_feed)
+                    yield ret
+                    bar_cnt += 1
+                except StopIteration:
+                    bar_feed = self._get_bar_feed(path_name, storage_type, start_date, end_date,
+                                                  group=group, chunksize=HDFSTORE_CHUNK_IN_ROW)
+                    if bar_feed is not None:
+                        continue
+                    else:
+                        logger.info(f'In _get_bar_feed -> bar_generator, all the bars (total: {bar_cnt}) loaded ')
+                        break
+                except Exception as e:
+                    logger.exception(f'In _get_bar_feed -> bar_generator error:\n{str(Exception)} - {str(e)}')
+                    break
+
+        feed = bar_generator()
+        return feed
+
+    def _get_bar_feed(self, file_path_name, storage_type, start_date, end_date, group=None, chunksize=None):
+        if storage_type == 'hdf5':
+            if self._storage is None:
+                self._chunk_feed = \
+                    self._get_chunk_feed(file_path_name, storage_type, start_date, end_date, group=group,
+                                         chunksize=chunksize)
+            try:
+                df_bar_chunk = next(self._chunk_feed)
+                logger.info(f'load hdf5 chunk: {df_bar_chunk.shape[0]} bars')
+                bar_feed = df_bar_chunk.iterrows()
+            except StopIteration:
+                logger.info(f'all hdf5 chunks loaded')
+                self._storage.close()
+                return None
+            else:
+                return bar_feed
+
+        else:  # for future supported storages (csv, database, etc.)
+            raise NotImplementedError
+
+    def _get_chunk_feed(self, file_path_name, storage_type, start_date, end_date, group=None, chunksize=None):
+        if storage_type == 'hdf5':
+            try:
+                if self._storage is None:
+                    self._storage = pd.HDFStore(file_path_name, 'r')
+                    where = 'timestamp >= start_date and timestamp <= end_date'
+                    feed = self._storage.select(group, where=where, iterator=True, chunksize=chunksize)
+                else:
+                    return
+            except Exception as e:
+                logger.exception(f'_get_chunk_feed error:\n{str(Exception)} - {str(e)}')
+                self._storage.close()
+                raise
+            else:
+                return iter(feed)  # return a chunk of bars in every iteration
+
+        else:  # for future supported storages (csv, database, etc.)
+            raise NotImplementedError
+
+    def get_storage_ref(self):
+        return self._storage
 
     def live_data_feed(self):
         pass
@@ -75,9 +173,13 @@ class OandaDataService:
         except Exception as e:
             logger.exception(f'load historical data error:\n{str(Exception)} - {str(e)}')
 
-        #
-        # dump download stats
-        #
+        self._dump_fetch_stats()
+
+    def _dump_fetch_stats(self):
+        """
+        dump download stats
+        :return: None
+        """
         if self._fetch_stats:
             for fetch_stats_dict in self._fetch_stats:
                 for file_name, group_list in fetch_stats_dict.items():
@@ -132,11 +234,11 @@ class OandaDataService:
                 #       3. add unique key as an attr of a h5 table so that can used for judge new data
                 #          whether already existed or not
 
-                def _dump_h5(h5f, df_cache, final=True):
+                def _dump_h5(store, cache, final=True):
                     # shift to appropriate data type for shrinking data size
-                    for col in df_cache.columns:
-                        df_cache[col] = df_cache[col].astype(field_dtype_dict[col], copy=True)
-                        logger.debug(df_cache[col].dtypes)
+                    for col in cache.columns:
+                        cache[col] = cache[col].astype(field_dtype_dict[col], copy=True)
+                        logger.debug(cache[col].dtypes)
 
                     # reset index
                     # df_candles.set_index('timestamp', inplace=True)
@@ -146,8 +248,7 @@ class OandaDataService:
                     else:
                         logger.info('\n\t\t **** Dumping to file: to continue (in loop) ****\n')
 
-                    # write to file
-                    h5f.append(api_param.param['granularity'], df_cache, data_columns=True)
+                    store.append(api_param.param['granularity'], cache, data_columns=True)
 
                 logger.info(f'download to file: {os.path.abspath(path_name)}')
 
@@ -192,7 +293,7 @@ class OandaDataService:
                         else:
                             # df_cache = df_cache.append(candles)
                             next_cached_idx = df_cache.shape[0]
-                            new_idx = range(next_cached_idx, next_cached_idx+len(candles))
+                            new_idx = range(next_cached_idx, next_cached_idx + len(candles))
                             df_cache = df_cache.append(pd.DataFrame(candles, index=new_idx))
 
                         cache_size = df_cache.memory_usage(deep=True).sum()
@@ -200,7 +301,7 @@ class OandaDataService:
                                                         {cache_size / candle_cnt}B/Candle")
 
                         if candle_cnt > HDFSTORE_CHUNK_IN_ROW:
-                            assert(df_cache.shape[0] == candle_cnt)
+                            assert (df_cache.shape[0] == candle_cnt)
                             candle_cnt = 0
                             _dump_h5(h5f, df_cache, final=False)
                             df_cache = None
@@ -249,13 +350,3 @@ def fetch_oanda_data(oandaconfig, fetchconfig):
     """
     ods = OandaDataService(oandaconfig)
     ods.fetch_data(fetchconfig)
-
-
-def feed_oanda_data(tradeconfig):
-    # backtest data setup
-    # start_date = datetime.datetime(2015, 1, 1)
-    # end_date = datetime.datetime(2018, 1, 1)
-    # instrument = 'EUR_USD'
-    # granularity = 'D'
-    # backtest_data_feed(instrument, granularity, start_date, end_date)
-    pass

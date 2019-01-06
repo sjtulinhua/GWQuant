@@ -10,8 +10,7 @@ import yaml
 import logging
 
 from garagequant.dataservice.oanda import oandafeed
-
-import garagequant.eventdriver as evtd
+from garagequant.trader import trader
 
 logger = None
 
@@ -34,24 +33,24 @@ def test_yaml_load(config_file):
     return yamlconfig
 
 
-def run_backtesting(config_file):
-    # initial a backtest
-    ed = evtd.EventDriver()
-    oandafeed.feed_oanda_data(tradeconfig)
-
 if __name__ == '__main__':
     setup_logger()
 
     tradeconfig = test_yaml_load('tradeconfig.yaml')
 
     if tradeconfig['action'] == 'getdata':
-        if tradeconfig['getdata']['broker'] == 'oanda':
+        if tradeconfig['getdata']['traderoom'] == 'oanda':
             oandafeed.fetch_oanda_data(tradeconfig['oanda'], tradeconfig['getdata'])
 
     elif tradeconfig['action'] == 'backtest':
-        if tradeconfig['getdata']['broker'] == 'oanda':
-            run_backtesting(tradeconfig)
-        pass
+        brokerconfig = None
+        backtestconfig = tradeconfig['backtest']
+
+        if backtestconfig['broker'] == 'oanda':
+            brokerconfig = tradeconfig['oanda']
+
+        back_trader = trader.BackTrader(brokerconfig, backtestconfig)
+        back_trader.run_backtest()
 
     elif tradeconfig['action'] == 'livetrade':
         logger.info('to livetrade')
